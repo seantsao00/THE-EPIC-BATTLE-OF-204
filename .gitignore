@@ -11,3 +11,6 @@ wheels/
 
 # MacOS management files
 .DS_Store
+
+# Sqlite database files
+*.db
