@@ -3,7 +3,7 @@ name = "THE-EPIC-BATTLE-OF-204"
 version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
-    "aiohttp>=3.11.18",
+    "crawl4ai>=0.6.3",
     "dnslib>=0.9.26",
     "fastapi[standard]>=0.115.12",
     "openai>=1.79.0",

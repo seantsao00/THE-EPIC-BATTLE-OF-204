@@ -1,21 +1,30 @@
 import os
 
-import aiohttp
 import openai
+from crawl4ai import (
+    AsyncWebCrawler,
+    CrawlerRunConfig,
+    CrawlResult
+)
 
 from .database import SessionLocal
 from .models import DomainList
 
-
 async def fetch_site_text(domain: str, timeout: int = 5, max_bytes: int = 5000) -> str:
+    run_config = CrawlerRunConfig(
+        page_timeout=timeout * 1000, # ms
+    )
+
     for scheme in ["https", "http"]:
         url = f"{scheme}://{domain.strip('.')}/"
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=timeout)) as resp:
-                    if resp.status == 200 and resp.content_type.startswith('text'):
-                        text = await resp.text()
-                        return text[:max_bytes]
+            async with AsyncWebCrawler() as crawler:
+                result: CrawlResult = await crawler.arun(
+                    url=url,
+                    config=run_config
+                )
+                if result.success:
+                    return result.markdown[:max_bytes]
         except Exception as e:
             continue
     return ""
