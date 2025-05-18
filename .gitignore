@@ -8,3 +8,6 @@ wheels/
 
 # Virtual environments
 .venv
+
+# MacOS management files
+.DS_Store
