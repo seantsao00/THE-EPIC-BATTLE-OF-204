@@ -10,26 +10,25 @@ from .models import DomainList, DomainLog
 class FilteringResolver(BaseResolver):
     def resolve(self, request, handler):
         qname = str(request.q.qname)
-        db = SessionLocal()
-        # Check whitelist
-        if db.query(DomainList).filter_by(domain=qname, list_type='whitelist').first():
-            status = 'allowed'
-        elif db.query(DomainList).filter_by(domain=qname, list_type='blacklist').first():
-            status = 'blocked'
-        else:
-            # Use LLM or fallback
-            # Here we use a synchronous stub for simplicity, should use async in production
-            safe = asyncio.run(is_domain_safe(qname))
-            status = 'allowed' if safe else 'blocked'
-        # Log
-        log = db.query(DomainLog).filter_by(domain=qname).first()
-        if log:
-            log.count += 1
-        else:
-            log = DomainLog(domain=qname, status=status)
-            db.add(log)
-        db.commit()
-        db.close()
+        with SessionLocal() as db:
+            # Check whitelist
+            if db.query(DomainList).filter_by(domain=qname, list_type='whitelist').first():
+                status = 'allowed'
+            elif db.query(DomainList).filter_by(domain=qname, list_type='blacklist').first():
+                status = 'blocked'
+            else:
+                # Use LLM or fallback
+                # Here we use a synchronous stub for simplicity, should use async in production
+                safe = asyncio.run(is_domain_safe(qname))
+                status = 'allowed' if safe else 'blocked'
+            # Log
+            log = db.query(DomainLog).filter_by(domain=qname).first()
+            if log:
+                log.count += 1 # type: ignore
+            else:
+                log = DomainLog(domain=qname, status=status)
+                db.add(log)
+            db.commit()
         # Forward or block
         if status == 'blocked':
             from dnslib import QTYPE, RR, A

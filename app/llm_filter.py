@@ -3,7 +3,7 @@ import os
 import aiohttp
 import openai
 
-from .database import get_session_local
+from .database import SessionLocal
 from .models import DomainList
 
 
@@ -12,7 +12,7 @@ async def fetch_site_text(domain: str, timeout: int = 5, max_bytes: int = 5000) 
         url = f"{scheme}://{domain.strip('.')}/"
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=timeout) as resp:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=timeout)) as resp:
                     if resp.status == 200 and resp.content_type.startswith('text'):
                         text = await resp.text()
                         return text[:max_bytes]
@@ -37,22 +37,21 @@ async def moderate_text(text: str) -> dict:
 
 
 async def is_domain_safe(domain: str) -> bool:
-    db = get_session_local()
+    with SessionLocal() as db:
+        if db.query(DomainList).filter_by(domain=domain, list_type='blacklist').first():
+            return False
 
-    if db.query(DomainList).filter_by(domain=domain, list_type='blacklist').first():
-        return False
-    
-    if db.query(DomainList).filter_by(domain=domain, list_type='whitelist').first():
-        return True
+        if db.query(DomainList).filter_by(domain=domain, list_type='whitelist').first():
+            return True
 
-    content = await fetch_site_text(domain)
-    mod_result = await moderate_text(content)
-    harmful = mod_result["flagged"] and getattr(mod_result["categories"], "sexual", False)
+        content = await fetch_site_text(domain)
+        mod_result = await moderate_text(content)
+        harmful = mod_result["flagged"] and getattr(mod_result["categories"], "sexual", False)
 
-    if harmful:
-        db.add(DomainList(domain=domain, list_type="blacklist"))
-    else:
-        db.add(DomainList(domain=domain, list_type="whitelist"))
-    db.commit()
+        if harmful:
+            db.add(DomainList(domain=domain, list_type="blacklist"))
+        else:
+            db.add(DomainList(domain=domain, list_type="whitelist"))
+        db.commit()
 
-    return not harmful
+        return not harmful
