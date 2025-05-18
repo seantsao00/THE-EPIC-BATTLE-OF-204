@@ -14,3 +14,6 @@ wheels/
 
 # Sqlite database files
 *.db
+
+# Environment variables
+.env
