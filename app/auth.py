@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -33,9 +34,8 @@ def authenticate_user(username: str, password: str, db: Session):
 
 
 def create_access_token(data: dict):
-    from datetime import datetime, timedelta
     to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(hours=12)
+    expire = datetime.now(timezone.utc) + timedelta(hours=12)
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
