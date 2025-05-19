@@ -1,4 +1,6 @@
 import asyncio
+import socket
+import threading
 
 from dnslib.server import BaseResolver, DNSLogger, DNSRecord, DNSServer
 
@@ -12,15 +14,21 @@ class FilteringResolver(BaseResolver):
         qname = str(request.q.qname)
         with SessionLocal() as db:
             # Check whitelist
+            print(f"Resolving {qname}")
             if db.query(DomainList).filter_by(domain=qname, list_type='whitelist').first():
                 status = 'allowed'
+                print(f"Domain {qname} is whitelisted")
             elif db.query(DomainList).filter_by(domain=qname, list_type='blacklist').first():
                 status = 'blocked'
+                print(f"Domain {qname} is blacklisted")
             else:
-                # Use LLM or fallback
-                # Here we use a synchronous stub for simplicity, should use async in production
-                safe = asyncio.run(is_domain_safe(qname))
-                status = 'allowed' if safe else 'blocked'
+                print(f"Domain {qname} not in DB, checking with LLM...")
+                status = 'allowed'
+                def background_llm_check(domain):
+                    def run():
+                        asyncio.run(is_domain_safe(domain))
+                    threading.Thread(target=run, daemon=True).start()
+                background_llm_check(qname)
             # Log
             log = db.query(DomainLog).filter_by(domain=qname).first()
             if log:
@@ -36,8 +44,6 @@ class FilteringResolver(BaseResolver):
             reply.add_answer(RR(qname, QTYPE.A, rdata=A("0.0.0.0"), ttl=60))
             return reply
         else:
-            import socket
-
             # Forward to public DNS (8.8.8.8), real-world: support fallback/upstreams.
             upstream_ip = "8.8.8.8"
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
