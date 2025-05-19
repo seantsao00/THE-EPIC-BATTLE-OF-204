@@ -6,6 +6,7 @@ from crawl4ai import (
     CrawlerRunConfig,
     BrowserConfig,
     CrawlResult,
+    BFSDeepCrawlStrategy,
     CacheMode
 )
 from typing import AsyncGenerator
@@ -14,17 +15,23 @@ from .database import SessionLocal
 from .models import DomainList
 
 async def fetch_site_text(domain: str, timeout: int = 5, max_bytes: int = 5000) -> str:
+    print(f"fetching '{domain}' text...")
     browser_config = BrowserConfig(
         browser_type="chromium",
         headless=True,
         verbose=False
     )
     run_config = CrawlerRunConfig(
+         deep_crawl_strategy=BFSDeepCrawlStrategy( # can be DFSDeepCrawlStrategy
+            max_depth=2, 
+            max_pages=10,
+            include_external=False
+        ),
         page_timeout=timeout * 1000, # ms
-        cache_mode=CacheMode.BYPASS, # convinent for testing fetching functionality
+        cache_mode=CacheMode.BYPASS, # can be ENABLED, BYPASS, READ_ONLY, WRITE_ONLY
         verbose=False
     )
-    
+
     for scheme in ["https", "http"]:
         url = f"{scheme}://{domain.strip('.')}/"
         try:
