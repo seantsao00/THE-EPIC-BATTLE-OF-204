@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -38,4 +38,6 @@ def remove_from_list(
     if dl:
         db.delete(dl)
         db.commit()
-    return {"status": "ok"}
+        return {"status": "ok"}
+    else:
+        raise HTTPException(status_code=404, detail="Domain not found in list")
