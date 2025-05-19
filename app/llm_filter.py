@@ -4,27 +4,40 @@ import openai
 from crawl4ai import (
     AsyncWebCrawler,
     CrawlerRunConfig,
-    CrawlResult
+    BrowserConfig,
+    CrawlResult,
+    CacheMode
 )
+from typing import AsyncGenerator
 
 from .database import SessionLocal
 from .models import DomainList
 
 async def fetch_site_text(domain: str, timeout: int = 5, max_bytes: int = 5000) -> str:
+    browser_config = BrowserConfig(
+        browser_type="chromium",
+        headless=True,
+        verbose=False
+    )
     run_config = CrawlerRunConfig(
         page_timeout=timeout * 1000, # ms
+        cache_mode=CacheMode.BYPASS, # convinent for testing fetching functionality
+        verbose=False
     )
-
+    
     for scheme in ["https", "http"]:
         url = f"{scheme}://{domain.strip('.')}/"
         try:
-            async with AsyncWebCrawler() as crawler:
-                result: CrawlResult = await crawler.arun(
+            async with AsyncWebCrawler(config=browser_config) as crawler:
+                result = await crawler.arun(
                     url=url,
                     config=run_config
                 )
-                if result.success:
-                    return result.markdown[:max_bytes]
+                if not isinstance(result, AsyncGenerator):
+                    res: CrawlResult = result[0]
+                    if res and res.success and res.markdown:
+                        return res.markdown[:max_bytes]
+
         except Exception as e:
             continue
     return ""
