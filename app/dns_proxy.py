@@ -24,6 +24,7 @@ class FilteringResolver(BaseResolver):
             else:
                 print(f"Domain {qname} not in DB, checking with LLM...")
                 status = 'allowed'
+
                 def background_llm_check(domain):
                     def run():
                         asyncio.run(is_domain_safe(domain))
@@ -32,7 +33,7 @@ class FilteringResolver(BaseResolver):
             # Log
             log = db.query(DomainLog).filter_by(domain=qname).first()
             if log:
-                log.count += 1 # type: ignore
+                log.count += 1  # type: ignore
             else:
                 log = DomainLog(domain=qname, status=status)
                 db.add(log)
@@ -52,8 +53,8 @@ class FilteringResolver(BaseResolver):
             return DNSRecord.parse(data)
 
 
-def start_dns_proxy(port=5353):
+def start_dns_proxy(ip="127.0.0.1", port=5353):
     resolver = FilteringResolver()
     logger = DNSLogger(prefix=False)
-    server = DNSServer(resolver, port=port, address="127.0.0.1", logger=logger)
+    server = DNSServer(resolver, port=port, address=ip, logger=logger)
     server.start_thread()

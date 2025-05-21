@@ -15,7 +15,9 @@ A LLM-driven DNS firewall and moderation API for college final project use.
     And optionally:
 
     ```env
+    DNS_IP=127.0.0.1
     DNS_PORT=5353
+    API_IP=127.0.0.1
     API_PORT=8000
     SECRET_KEY=your_secret_key
     SQLALCHEMY_DATABASE_URL=sqlite:///./db.sqlite3
