@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .api import auth, domains, lists
+from .api import auth, domain_logs, lists
 from .database import Base, engine
 from .dns_proxy import start_dns_proxy
 
@@ -34,7 +34,7 @@ app.add_middleware(
 Base.metadata.create_all(bind=engine)
 
 app.include_router(auth.router)
-app.include_router(domains.router)
+app.include_router(domain_logs.router)
 app.include_router(lists.router)
 
 
