@@ -1,14 +1,14 @@
 import re
-from typing import Annotated, Sequence
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, field_validator
 from sqlmodel import func, or_, select
 from sqlmodel.sql.expression import col
 
 from ..auth import UserDep
 from ..database import SessionDep
-from ..models import DomainList, ListSource, ListType
+from ..models import DomainList, ListSource, ListType, MetaResponse
 
 router = APIRouter(prefix="/api/lists", tags=["lists"])
 
@@ -19,13 +19,19 @@ class DomainRequest(BaseModel):
     @field_validator('domain')
     @classmethod
     def validate_domain(cls, v):
-        pattern = re.compile(r'^(?=.{1,253}$)(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*\.[A-Za-z]{2,}$')
+        pattern = re.compile(
+            r'^(?=.{1,253}$)(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*\.[A-Za-z]{2,}$')
         if not pattern.match(v):
             raise ValueError('Invalid domain name')
         return v
 
 
-@router.get("/{source}/{list_type}/domains")
+class DomainListResponse(BaseModel):
+    domains: list[DomainList]
+    meta: MetaResponse
+
+
+@router.get("/{source}/{list_type}/domains", response_model=DomainListResponse)
 def list_domains_in_list(
     source: ListSource,
     list_type: ListType,
@@ -33,21 +39,37 @@ def list_domains_in_list(
     current_user: UserDep,
     offset: Annotated[int, Query(ge=0, description="Number of records to skip for pagination")] = 0,
     limit: Annotated[int, Query(ge=1, le=1000, description="Maximum number of records to return")] = 100,
-) -> Sequence[DomainList]:
+) -> dict:
     statement = select(DomainList).where(DomainList.source == source,
                                          DomainList.list_type == list_type)
+    total = session.exec(
+        select(func.count())
+        .select_from(DomainList)
+        .where(DomainList.source == source, DomainList.list_type == list_type)).one()
     if source is ListSource.llm:
         statement = statement.where(or_(col(DomainList.expires_at) is None,
                                         DomainList.expires_at > func.now()))
     domains = session.exec(
         statement.offset(offset).limit(limit)
     ).all()
-    return domains
+    return {
+        "domains": domains,
+        "meta": {
+            "total": total,
+            "offset": offset,
+            "limit": limit
+        }
+    }
+
+
+class StatusResponse(BaseModel):
+    status: str
 
 
 @router.post(
     "/manual/{list_type}/domains",
     status_code=status.HTTP_201_CREATED,
+    response_model=StatusResponse,
     responses={
         201: {"description": "Domain added successfully"},
         409: {"description": "Domain already in list"},
@@ -74,6 +96,7 @@ def add_domain_to_manual_list(
 
 @router.delete(
     "/{source}/{list_type}/domains/{domain}",
+    response_model=StatusResponse,
     responses={
         200: {"description": "Domain deleted successfully"},
         404: {"description": "Domain not found in list"},

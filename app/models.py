@@ -1,6 +1,7 @@
 import enum
 from datetime import datetime
 
+from pydantic import BaseModel
 from sqlmodel import Field, SQLModel
 
 
@@ -40,3 +41,9 @@ class DomainList(SQLModel, table=True):
     source: ListSource
     created_at: datetime = Field(default_factory=datetime.utcnow)
     expires_at: datetime | None = None
+
+
+class MetaResponse(BaseModel):
+    total: int
+    offset: int
+    limit: int
