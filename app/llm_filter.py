@@ -1,18 +1,13 @@
 import os
-
-import openai
-from crawl4ai import (
-    AsyncWebCrawler,
-    CrawlerRunConfig,
-    BrowserConfig,
-    CrawlResult,
-    BFSDeepCrawlStrategy,
-    CacheMode
-)
 from typing import AsyncGenerator
 
+import openai
+from crawl4ai import (AsyncWebCrawler, BFSDeepCrawlStrategy, BrowserConfig, CacheMode,
+                      CrawlerRunConfig, CrawlResult)
+
 from .database import SessionLocal
-from .models import DomainList
+from .models import DomainList, ListType
+
 
 async def fetch_site_text(domain: str, timeout: int = 5, max_bytes: int = 5000) -> str:
     print(f"fetching '{domain}' text...")
@@ -67,20 +62,20 @@ async def moderate_text(text: str) -> dict:
 
 async def is_domain_safe(domain: str) -> bool:
     with SessionLocal() as db:
-        if db.query(DomainList).filter_by(domain=domain, list_type='blacklist').first():
+        if db.query(DomainList).filter_by(domain=domain, list_type=ListType.blacklist.value).first():
             return False
 
-        if db.query(DomainList).filter_by(domain=domain, list_type='whitelist').first():
+        if db.query(DomainList).filter_by(domain=domain, list_type=ListType.whitelist.value).first():
             return True
 
         content = await fetch_site_text(domain)
         mod_result = await moderate_text(content)
-        harmful = mod_result["flagged"] and getattr(mod_result["categories"], "sexual", False)
+        harmful = mod_result["flagged"] and mod_result["categories"].get("sexual", False)
 
         if harmful:
-            db.add(DomainList(domain=domain, list_type="blacklist"))
+            db.add(DomainList(domain=domain, list_type=ListType.blacklist.value, source="llm"))
         else:
-            db.add(DomainList(domain=domain, list_type="whitelist"))
+            db.add(DomainList(domain=domain, list_type=ListType.whitelist.value, source="llm"))
         db.commit()
 
         return not harmful

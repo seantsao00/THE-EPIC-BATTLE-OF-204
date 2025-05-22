@@ -3,11 +3,12 @@ import queue
 import socket
 import threading
 
+from dnslib import QTYPE, RR, A
 from dnslib.server import BaseResolver, DNSLogger, DNSRecord, DNSServer
 
 from .database import SessionLocal
 from .llm_filter import is_domain_safe
-from .models import DomainList, DomainLog
+from .models import DomainList, DomainLog, ListType, DomainStatus
 
 
 class FilteringResolver(BaseResolver):
@@ -36,29 +37,23 @@ class FilteringResolver(BaseResolver):
     def resolve(self, request, handler):
         qname = str(request.q.qname)
         with SessionLocal() as db:
-            # Check whitelist
             print(f"Resolving {qname}")
-            if db.query(DomainList).filter_by(domain=qname, list_type='whitelist').first():
-                status = 'allowed'
+            if db.query(DomainList).filter_by(domain=qname, list_type=ListType.whitelist.value).first():
+                status = DomainStatus.allowed.value
                 print(f"Domain {qname} is whitelisted")
-            elif db.query(DomainList).filter_by(domain=qname, list_type='blacklist').first():
-                status = 'blocked'
+            elif db.query(DomainList).filter_by(domain=qname, list_type=ListType.blacklist.value).first():
+                status = DomainStatus.blocked.value
                 print(f"Domain {qname} is blacklisted")
             else:
                 print(f"Domain {qname} not in DB, enqueueing for LLM check...")
-                status = 'allowed'
+                status = DomainStatus.reviewed.value
                 self.domain_llm_queue.put(qname)
 
-            log = db.query(DomainLog).filter_by(domain=qname).first()
-            if log:
-                log.count += 1  # type: ignore
-            else:
-                log = DomainLog(domain=qname, status=status)
-                db.add(log)
+            log = DomainLog(domain=qname, status=status)
+            db.add(log)
             db.commit()
 
-        if status == 'blocked':
-            from dnslib import QTYPE, RR, A
+        if status == DomainStatus.blocked.value:
             reply = request.reply()
             reply.add_answer(RR(qname, QTYPE.A, rdata=A("0.0.0.0"), ttl=60))
             return reply

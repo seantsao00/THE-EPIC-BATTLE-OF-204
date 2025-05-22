@@ -15,4 +15,4 @@ def list_domain_logs(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[object, Depends(get_current_user)]
 ):
-    return db.query(DomainLog).order_by(DomainLog.last_seen.desc()).all()
+    return db.query(DomainLog).order_by(DomainLog.timestamp.desc()).all()
