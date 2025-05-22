@@ -1,18 +1,17 @@
 import os
+from typing import Annotated
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import declarative_base, sessionmaker
+from fastapi import Depends
+from sqlmodel import Session, SQLModel, create_engine
 
 SQLALCHEMY_DATABASE_URL = os.environ.get("SQLALCHEMY_DATABASE_URL", "sqlite:///./firewall.db")
 
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-Base = declarative_base()
+SQLModel.metadata.create_all(bind=engine)
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+def get_session():
+    with Session(engine) as session:
+        yield session
+
+SessionDep = Annotated[Session, Depends(get_session)]

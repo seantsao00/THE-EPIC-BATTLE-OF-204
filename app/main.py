@@ -5,9 +5,10 @@ import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlmodel import SQLModel
 
 from .api import auth, domain_logs, lists
-from .database import Base, engine
+from .database import engine
 from .dns_proxy import start_dns_proxy
 
 
@@ -31,7 +32,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-Base.metadata.create_all(bind=engine)
+SQLModel.metadata.create_all(bind=engine)
 
 app.include_router(auth.router)
 app.include_router(domain_logs.router)

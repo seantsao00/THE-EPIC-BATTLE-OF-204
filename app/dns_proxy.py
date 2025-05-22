@@ -5,10 +5,11 @@ import threading
 
 from dnslib import QTYPE, RR, A
 from dnslib.server import BaseResolver, DNSLogger, DNSRecord, DNSServer
+from sqlmodel import Session, select
 
-from .database import SessionLocal
+from .database import engine
 from .llm_filter import is_domain_safe
-from .models import DomainList, DomainLog, ListType, DomainStatus
+from .models import DomainList, DomainLog, DomainStatus, ListType
 
 
 class FilteringResolver(BaseResolver):
@@ -33,22 +34,22 @@ class FilteringResolver(BaseResolver):
 
     def resolve(self, request, handler):
         qname = str(request.q.qname)
-        with SessionLocal() as db:
+        with Session(engine) as session:
             print(f"Resolving {qname}")
-            if db.query(DomainList).filter_by(domain=qname, list_type=ListType.whitelist.value).first():
-                status = DomainStatus.allowed.value
+            if session.exec(select(DomainList).where(DomainList.domain == qname, DomainList.list_type == ListType.whitelist)).first():
+                status = DomainStatus.allowed
                 print(f"Domain {qname} is whitelisted")
-            elif db.query(DomainList).filter_by(domain=qname, list_type=ListType.blacklist.value).first():
-                status = DomainStatus.blocked.value
+            elif session.exec(select(DomainList).where(DomainList.domain == qname, DomainList.list_type == ListType.blacklist)).first():
+                status = DomainStatus.blocked
                 print(f"Domain {qname} is blacklisted")
             else:
                 print(f"Domain {qname} not in DB, enqueueing for LLM check...")
-                status = DomainStatus.reviewed.value
+                status = DomainStatus.reviewed
                 self.domain_llm_queue.put(qname)
 
             log = DomainLog(domain=qname, status=status)
-            db.add(log)
-            db.commit()
+            session.add(log)
+            session.commit()
 
         if status == DomainStatus.blocked.value:
             reply = request.reply()
