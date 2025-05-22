@@ -31,7 +31,7 @@ def list_domains_in_list(
     list_type: ListType,
     session: SessionDep,
     current_user: Annotated[object, Depends(get_current_user)],
-    skip: Annotated[int, Query(ge=0, description="Number of records to skip for pagination")] = 0,
+    offset: Annotated[int, Query(ge=0, description="Number of records to skip for pagination")] = 0,
     limit: Annotated[int, Query(ge=1, le=1000, description="Maximum number of records to return")] = 100,
 ) -> Sequence[DomainList]:
     statement = select(DomainList).where(DomainList.source == source,
@@ -40,7 +40,7 @@ def list_domains_in_list(
         statement = statement.where(or_(col(DomainList.expires_at) is None,
                                         DomainList.expires_at > func.now()))
     domains = session.exec(
-        statement.offset(skip).limit(limit)
+        statement.offset(offset).limit(limit)
     ).all()
     return domains
 
