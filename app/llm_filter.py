@@ -4,12 +4,11 @@ import aiohttp
 import openai
 from crawl4ai import (
     AsyncWebCrawler,
-    BestFirstCrawlingStrategy,
+    BFSDeepCrawlStrategy,
     BrowserConfig,
     CacheMode,
     CrawlerRunConfig,
     CrawlResult,
-    DefaultMarkdownGenerator,
 )
 from sqlmodel import Session, select
 
@@ -25,20 +24,15 @@ async def fetch_site_text(domain: str, timeout: int = 5, max_bytes: int = 5000) 
         headless=True,
         verbose=False
     )
-    fit_md_generator = DefaultMarkdownGenerator(
-        content_source="fit_html",
-        options={"ignore_links": True}
-    )
     run_config = CrawlerRunConfig(
-        deep_crawl_strategy=BestFirstCrawlingStrategy(  # can be DFSDeepCrawlStrategy or BFSDeepCrawlStrategy
-            max_depth=3,
-            max_pages=3,
+        deep_crawl_strategy=BFSDeepCrawlStrategy(  # can be DFSDeepCrawlStrategy
+            max_depth=2,
+            max_pages=10,
             include_external=False
         ),
         page_timeout=timeout * 1000,  # ms
         cache_mode=CacheMode.BYPASS,  # can be ENABLED, BYPASS, READ_ONLY, WRITE_ONLY
-        verbose=False,
-        markdown_generator=fit_md_generator
+        verbose=False
     )
 
     # Try crawl4ai first
@@ -47,21 +41,11 @@ async def fetch_site_text(domain: str, timeout: int = 5, max_bytes: int = 5000) 
         try:
             async with AsyncWebCrawler(config=browser_config) as crawler:
                 result = await crawler.arun(url, config=run_config)
-                texts: list[str] = []
-                if isinstance(result, AsyncGenerator):
-                    async for res in result:
-                        res: CrawlResult
-                        if res and res.success and res.markdown:
-                            texts.append(res.markdown)
-                else:
-                    for res in result:
-                        res: CrawlResult
-                        if res and res.success and res.markdown:
-                            texts.append(res.markdown)
-                if texts:
-                    print(f"Fetched {len(texts)} pages from {url}")
-                    combined = "\n".join(texts)
-                    return combined[:max_bytes]
+
+                if not isinstance(result, AsyncGenerator):
+                    res: CrawlResult = result[0]
+                    if res and res.success and res.markdown:
+                        return res.markdown[:max_bytes]
         except Exception as e:
             print(f"Error fetching {url} with crawl4ai: {e}")
             continue
@@ -85,7 +69,6 @@ async def moderate_text(text: str) -> bool:
     if not text:
         return False
     try:
-        print(text)
         response = await openai.AsyncOpenAI(api_key=settings.openai_api_key).moderations.create(
             model="omni-moderation-latest",
             input=text,
