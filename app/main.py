@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from .api import auth, domains, lists
 from .database import Base, engine
@@ -21,6 +22,14 @@ async def lifespan(app: FastAPI):
 load_dotenv()
 
 app = FastAPI(title="Firewall DNS API", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 Base.metadata.create_all(bind=engine)
 
