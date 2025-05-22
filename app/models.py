@@ -47,3 +47,6 @@ class MetaResponse(BaseModel):
     total: int
     offset: int
     limit: int
+
+class ErrorResponse(BaseModel):
+    detail: str

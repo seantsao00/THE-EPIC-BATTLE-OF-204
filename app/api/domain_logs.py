@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Sequence
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
@@ -12,17 +12,17 @@ router = APIRouter(prefix="/api/domain-logs", tags=["domain-logs"])
 
 
 class DomainLogListResponse(BaseModel):
-    logs: list[DomainLog]
+    logs: Sequence[DomainLog]
     meta: MetaResponse
 
 
-@router.get("", response_model=DomainLogListResponse)
+@router.get("")
 def list_domain_logs(
     session: SessionDep,
     current_user: UserDep,
     offset: Annotated[int, Query(ge=0, description="Number of records to skip for pagination")] = 0,
     limit: Annotated[int, Query(ge=1, le=1000, description="Maximum number of records to return")] = 100,
-):
+) -> DomainLogListResponse:
     total = session.exec(select(func.count()).select_from(DomainLog)).one()
     logs = session.exec(
         select(DomainLog)
@@ -30,11 +30,11 @@ def list_domain_logs(
         .offset(offset)
         .limit(limit)
     ).all()
-    return {
-        "logs": logs,
-        "meta": {
-            "total": total,
-            "offset": offset,
-            "limit": limit
-        }
-    }
+    return DomainLogListResponse(
+        logs=logs,
+        meta=MetaResponse(
+            total=total,
+            offset=offset,
+            limit=limit
+        )
+    )
