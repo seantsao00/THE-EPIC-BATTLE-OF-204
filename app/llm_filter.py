@@ -1,8 +1,14 @@
 from typing import AsyncGenerator
 
 import openai
-from crawl4ai import (AsyncWebCrawler, BFSDeepCrawlStrategy, BrowserConfig, CacheMode,
-                      CrawlerRunConfig, CrawlResult)
+from crawl4ai import (
+    AsyncWebCrawler,
+    BFSDeepCrawlStrategy,
+    BrowserConfig,
+    CacheMode,
+    CrawlerRunConfig,
+    CrawlResult,
+)
 from sqlmodel import Session, select
 
 from .database import engine
@@ -30,19 +36,17 @@ async def fetch_site_text(domain: str, timeout: int = 5, max_bytes: int = 5000) 
 
     for scheme in ["https", "http"]:
         url = f"{scheme}://{domain.strip('.')}/"
-        try:
-            async with AsyncWebCrawler(config=browser_config) as crawler:
-                result = await crawler.arun(
-                    url=url,
-                    config=run_config
-                )
+        async with AsyncWebCrawler(config=browser_config) as crawler:
+            try:
+                result = await crawler.arun(url, config=run_config)
+
                 if not isinstance(result, AsyncGenerator):
                     res: CrawlResult = result[0]
                     if res and res.success and res.markdown:
                         return res.markdown[:max_bytes]
-
-        except Exception as e:
-            continue
+            except Exception as e:
+                print(f"Error fetching {url}: {e}")
+                continue
     return ""
 
 
@@ -56,16 +60,25 @@ async def moderate_text(text: str) -> dict:
         )
         result = response.results[0]
         return {"flagged": result.flagged, "categories": result.categories}
+    except openai.OpenAIError as e:
+        print(f"OpenAI error: {e}")
+        return {"flagged": False, "categories": {}}
     except Exception as e:
-        print(f"OpenAI moderation error: {e}")
+        print(f"unexpected error: {e}")
         return {"flagged": False, "categories": {}}
 
 
 async def is_domain_safe(domain: str) -> bool:
     with Session(engine) as session:
-        if session.exec(select(DomainList).where(DomainList.domain == domain, DomainList.list_type == ListType.blacklist)).first():
+        if session.exec(
+            select(DomainList).where(
+                DomainList.domain == domain,
+                DomainList.list_type == ListType.blacklist)).first():
             return False
-        if session.exec(select(DomainList).where(DomainList.domain == domain, DomainList.list_type == ListType.whitelist)).first():
+        if session.exec(
+            select(DomainList).where(
+                DomainList.domain == domain,
+                DomainList.list_type == ListType.whitelist)).first():
             return True
         content = await fetch_site_text(domain)
         mod_result = await moderate_text(content)

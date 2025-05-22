@@ -26,7 +26,7 @@ def list_domains_in_list(
     statement = select(DomainList).where(DomainList.source == source,
                                          DomainList.list_type == list_type)
     if source is ListSource.llm:
-        statement = statement.where(or_(col(DomainList.expires_at) == None,
+        statement = statement.where(or_(col(DomainList.expires_at) is None,
                                         DomainList.expires_at > func.now()))
     domains = session.exec(statement).all()
     return domains
@@ -76,7 +76,7 @@ def remove_domain_from_list(
     statement = select(DomainList).where(DomainList.domain == domain,
                                          DomainList.list_type == list_type, DomainList.source == source)
     if source is ListSource.llm:
-        statement = statement.where(or_(col(DomainList.expires_at) == None,
+        statement = statement.where(or_(col(DomainList.expires_at) is None,
                                         DomainList.expires_at > func.now()))
     domain_list = session.exec(statement).first()
     if not domain_list:

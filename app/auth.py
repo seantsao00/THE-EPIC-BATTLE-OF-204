@@ -56,8 +56,8 @@ def get_current_user(
         username = payload.get("sub")
         if username is None:
             raise credentials_exception
-    except JWTError:
-        raise credentials_exception
+    except JWTError as e:
+        raise credentials_exception from e
     statement = select(User).where(User.username == username)
     user = session.exec(statement).first()
     if user is None:

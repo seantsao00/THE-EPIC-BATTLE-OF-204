@@ -36,7 +36,10 @@ class FilteringResolver(BaseResolver):
         qname = str(request.q.qname)
         with Session(engine) as session:
             print(f"Resolving {qname}")
-            if session.exec(select(DomainList).where(DomainList.domain == qname, DomainList.list_type == ListType.whitelist)).first():
+            if session.exec(
+                select(DomainList).where(
+                    DomainList.domain == qname,
+                    DomainList.list_type == ListType.whitelist)).first():
                 status = DomainStatus.allowed
                 print(f"Domain {qname} is whitelisted")
             elif session.exec(select(DomainList).where(DomainList.domain == qname, DomainList.list_type == ListType.blacklist)).first():
@@ -55,12 +58,12 @@ class FilteringResolver(BaseResolver):
             reply = request.reply()
             reply.add_answer(RR(qname, QTYPE.A, rdata=A("0.0.0.0"), ttl=60))
             return reply
-        else:
-            upstream_ip = "8.8.8.8"
-            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            sock.sendto(request.pack(), (upstream_ip, 53))
-            data, _ = sock.recvfrom(4096)
-            return DNSRecord.parse(data)
+
+        upstream_ip = "8.8.8.8"
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.sendto(request.pack(), (upstream_ip, 53))
+        data, _ = sock.recvfrom(4096)
+        return DNSRecord.parse(data)
 
 
 def start_dns_proxy(ip="127.0.0.1", port=5353):
