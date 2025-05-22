@@ -4,11 +4,12 @@ import aiohttp
 import openai
 from crawl4ai import (
     AsyncWebCrawler,
-    BFSDeepCrawlStrategy,
+    BestFirstCrawlingStrategy,
     BrowserConfig,
     CacheMode,
     CrawlerRunConfig,
     CrawlResult,
+    DefaultMarkdownGenerator,
 )
 from sqlmodel import Session, select
 
@@ -24,15 +25,20 @@ async def fetch_site_text(domain: str, timeout: int = 5, max_bytes: int = 5000) 
         headless=True,
         verbose=False
     )
+    fit_md_generator = DefaultMarkdownGenerator(
+        content_source="fit_html",
+        options={"ignore_links": True}
+    )
     run_config = CrawlerRunConfig(
-        deep_crawl_strategy=BFSDeepCrawlStrategy(  # can be DFSDeepCrawlStrategy
-            max_depth=2,
-            max_pages=10,
+        deep_crawl_strategy=BestFirstCrawlingStrategy(  # can be DFSDeepCrawlStrategy or BFSDeepCrawlStrategy
+            max_depth=3,
+            max_pages=3,
             include_external=False
         ),
         page_timeout=timeout * 1000,  # ms
         cache_mode=CacheMode.BYPASS,  # can be ENABLED, BYPASS, READ_ONLY, WRITE_ONLY
-        verbose=False
+        verbose=False,
+        markdown_generator=fit_md_generator
     )
 
     # Try crawl4ai first
@@ -41,11 +47,20 @@ async def fetch_site_text(domain: str, timeout: int = 5, max_bytes: int = 5000) 
         try:
             async with AsyncWebCrawler(config=browser_config) as crawler:
                 result = await crawler.arun(url, config=run_config)
-
-                if not isinstance(result, AsyncGenerator):
-                    res: CrawlResult = result[0]
-                    if res and res.success and res.markdown:
-                        return res.markdown[:max_bytes]
+                texts: list[str] = []
+                if isinstance(result, AsyncGenerator):
+                    async for res in result:
+                        res: CrawlResult
+                        if res and res.success and res.markdown:
+                            texts.append(res.markdown)
+                else:
+                    for res in result:
+                        res: CrawlResult
+                        if res and res.success and res.markdown:
+                            texts.append(res.markdown)
+                if texts:
+                    combined = "\n".join(texts)
+                    return combined[:max_bytes]
         except Exception as e:
             print(f"Error fetching {url} with crawl4ai: {e}")
             continue

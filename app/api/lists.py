@@ -6,7 +6,7 @@ from pydantic import BaseModel, field_validator
 from sqlmodel import func, or_, select
 from sqlmodel.sql.expression import col
 
-from ..auth import get_current_user
+from ..auth import UserDep
 from ..database import SessionDep
 from ..models import DomainList, ListSource, ListType
 
@@ -30,7 +30,7 @@ def list_domains_in_list(
     source: ListSource,
     list_type: ListType,
     session: SessionDep,
-    current_user: Annotated[object, Depends(get_current_user)],
+    current_user: UserDep,
     offset: Annotated[int, Query(ge=0, description="Number of records to skip for pagination")] = 0,
     limit: Annotated[int, Query(ge=1, le=1000, description="Maximum number of records to return")] = 100,
 ) -> Sequence[DomainList]:
@@ -57,7 +57,7 @@ def add_domain_to_manual_list(
     list_type: ListType,
     domain_request: DomainRequest,
     session: SessionDep,
-    current_user: Annotated[object, Depends(get_current_user)]
+    current_user: UserDep
 ):
     existing_domain = session.exec(select(DomainList)
                                    .where(DomainList.domain == domain_request.domain)).first()
@@ -84,7 +84,7 @@ def remove_domain_from_list(
     list_type: ListType,
     domain: str,
     session: SessionDep,
-    current_user: Annotated[object, Depends(get_current_user)],
+    current_user: UserDep,
 ):
     statement = select(DomainList).where(DomainList.domain == domain,
                                          DomainList.list_type == list_type, DomainList.source == source)
