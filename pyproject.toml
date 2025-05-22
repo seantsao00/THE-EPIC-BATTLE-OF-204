@@ -3,14 +3,39 @@ name = "THE-EPIC-BATTLE-OF-204"
 version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
+    "aiohttp>=3.11.18",
+    "autopep8>=2.3.2",
     "crawl4ai>=0.6.3",
     "dnslib>=0.9.26",
     "fastapi[standard]>=0.115.12",
+    "isort>=6.0.1",
     "openai>=1.79.0",
     "passlib[bcrypt]>=1.7.4",
     "pydantic>=2.11.4",
+    "pydantic-settings>=2.9.1",
+    "pylint>=3.3.7",
     "python-dotenv>=1.1.0",
     "python-jose[cryptography]>=3.4.0",
-    "sqlalchemy>=2.0.41",
+    "sqlmodel>=0.0.24",
     "uvicorn[standard]>=0.34.2",
 ]
+
+[tool.autopep8]
+max_line_length = 110
+in-place = true
+recursive = true
+aggressive = 2
+
+[tool.isort]
+profile = "black"
+line_length = 110
+
+[tool.pylint.'MESSAGES CONTROL']
+disable = [
+    "missing-module-docstring",
+    "missing-class-docstring",
+    "missing-function-docstring"
+]
+
+[tool.pylint.FORMAT]
+max-line-length = 110

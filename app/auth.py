@@ -1,4 +1,3 @@
-import os
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
@@ -6,12 +5,13 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from sqlalchemy.orm import Session
+from sqlmodel import Session, select
 
-from .database import get_db
+from .database import SessionDep
 from .models import User
+from .settings import settings
 
-SECRET_KEY = os.environ.get("SECRET_KEY", "placeholder_secret_key")
+SECRET_KEY = settings.secret_key
 
 ALGORITHM = "HS256"
 
@@ -27,8 +27,9 @@ def get_password_hash(password):
     return pwd_context.hash(password)
 
 
-def authenticate_user(username: str, password: str, db: Session):
-    user = db.query(User).filter(User.username == username).first()
+def authenticate_user(username: str, password: str, session: Session):
+    statement = select(User).where(User.username == username)
+    user = session.exec(statement).first()
     if not user or not verify_password(password, user.hashed_password):
         return False
     return user
@@ -43,7 +44,7 @@ def create_access_token(data: dict):
 
 def get_current_user(
     token: Annotated[str, Depends(oauth2_scheme)],
-    db: Annotated[Session, Depends(get_db)]
+    session: SessionDep
 ):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -55,9 +56,10 @@ def get_current_user(
         username = payload.get("sub")
         if username is None:
             raise credentials_exception
-    except JWTError:
-        raise credentials_exception
-    user = db.query(User).filter(User.username == username).first()
+    except JWTError as e:
+        raise credentials_exception from e
+    statement = select(User).where(User.username == username)
+    user = session.exec(statement).first()
     if user is None:
         raise credentials_exception
     return user

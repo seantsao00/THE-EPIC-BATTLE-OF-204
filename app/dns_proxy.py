@@ -5,10 +5,11 @@ import threading
 
 from dnslib import QTYPE, RR, A
 from dnslib.server import BaseResolver, DNSLogger, DNSRecord, DNSServer
+from sqlmodel import Session, select
 
-from .database import SessionLocal
+from .database import engine
 from .llm_filter import is_domain_safe
-from .models import DomainList, DomainLog, ListType, DomainStatus
+from .models import DomainList, DomainLog, DomainStatus, ListType
 
 
 class FilteringResolver(BaseResolver):
@@ -21,48 +22,48 @@ class FilteringResolver(BaseResolver):
         self.llm_thread.start()
 
     async def _process_queue(self):
-        pending = set()
         loop = asyncio.get_event_loop()
         while True:
             domain = await loop.run_in_executor(None, self.domain_llm_queue.get)
             if domain is None:
                 break
-            task = loop.create_task(is_domain_safe(domain))
-            pending.add(task)
-            done, pending = await asyncio.wait(pending, timeout=0, return_when=asyncio.ALL_COMPLETED)
-            self.domain_llm_queue.task_done()
-        if pending:
-            await asyncio.wait(pending)
+            try:
+                await is_domain_safe(domain)
+            finally:
+                self.domain_llm_queue.task_done()
 
     def resolve(self, request, handler):
         qname = str(request.q.qname)
-        with SessionLocal() as db:
+        with Session(engine) as session:
             print(f"Resolving {qname}")
-            if db.query(DomainList).filter_by(domain=qname, list_type=ListType.whitelist.value).first():
-                status = DomainStatus.allowed.value
+            if session.exec(
+                select(DomainList).where(
+                    DomainList.domain == qname,
+                    DomainList.list_type == ListType.whitelist)).first():
+                status = DomainStatus.allowed
                 print(f"Domain {qname} is whitelisted")
-            elif db.query(DomainList).filter_by(domain=qname, list_type=ListType.blacklist.value).first():
-                status = DomainStatus.blocked.value
+            elif session.exec(select(DomainList).where(DomainList.domain == qname, DomainList.list_type == ListType.blacklist)).first():
+                status = DomainStatus.blocked
                 print(f"Domain {qname} is blacklisted")
             else:
                 print(f"Domain {qname} not in DB, enqueueing for LLM check...")
-                status = DomainStatus.reviewed.value
+                status = DomainStatus.reviewed
                 self.domain_llm_queue.put(qname)
 
             log = DomainLog(domain=qname, status=status)
-            db.add(log)
-            db.commit()
+            session.add(log)
+            session.commit()
 
         if status == DomainStatus.blocked.value:
             reply = request.reply()
             reply.add_answer(RR(qname, QTYPE.A, rdata=A("0.0.0.0"), ttl=60))
             return reply
-        else:
-            upstream_ip = "8.8.8.8"
-            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            sock.sendto(request.pack(), (upstream_ip, 53))
-            data, _ = sock.recvfrom(4096)
-            return DNSRecord.parse(data)
+
+        upstream_ip = "8.8.8.8"
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.sendto(request.pack(), (upstream_ip, 53))
+        data, _ = sock.recvfrom(4096)
+        return DNSRecord.parse(data)
 
 
 def start_dns_proxy(ip="127.0.0.1", port=5353):

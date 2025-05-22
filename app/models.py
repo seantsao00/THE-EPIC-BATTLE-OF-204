@@ -1,40 +1,42 @@
 import enum
-from sqlalchemy import Column, DateTime, Enum, Integer, String
-from sqlalchemy.sql import func
+from datetime import datetime
 
-from .database import Base
+from sqlmodel import Field, SQLModel
+
 
 class DomainStatus(str, enum.Enum):
     allowed = "allowed"
     blocked = "blocked"
     reviewed = "reviewed"
 
+
 class ListType(str, enum.Enum):
     whitelist = "whitelist"
     blacklist = "blacklist"
+
 
 class ListSource(str, enum.Enum):
     manual = "manual"
     llm = "llm"
 
-class DomainLog(Base):
-    __tablename__ = "domain_logs"
-    id = Column(Integer, primary_key=True, index=True)
-    domain = Column(String(255), index=True)
-    status = Column(Enum(DomainStatus), default=DomainStatus.reviewed, nullable=False)
-    timestamp = Column(DateTime, default=func.now())
 
-class User(Base):
-    __tablename__ = "users"
-    id = Column(Integer, primary_key=True, index=True)
-    username = Column(String(64), unique=True, index=True)
-    hashed_password = Column(String(128))
+class DomainLog(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    domain: str = Field(index=True, max_length=255)
+    status: DomainStatus = Field(default=DomainStatus.reviewed)
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
 
-class DomainList(Base):
-    __tablename__ = "domain_lists"
-    id = Column(Integer, primary_key=True, index=True)
-    domain = Column(String(255), unique=True, index=True)
-    list_type = Column(Enum(ListType), index=True, nullable=False)
-    source = Column(Enum(ListSource), nullable=False)
-    created_at = Column(DateTime, default=func.now())
-    expires_at = Column(DateTime, nullable=True)
+
+class User(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    username: str = Field(index=True, unique=True, max_length=64)
+    hashed_password: str = Field(max_length=128)
+
+
+class DomainList(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    domain: str = Field(index=True, unique=True, max_length=255)
+    list_type: ListType = Field(index=True)
+    source: ListSource
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    expires_at: datetime | None = None

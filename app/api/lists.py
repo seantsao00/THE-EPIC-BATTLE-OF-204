@@ -1,14 +1,13 @@
-from datetime import datetime, timezone
-from enum import Enum
-from typing import Annotated
+import re
+from typing import Annotated, Sequence
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
-from sqlalchemy.orm import Session
-from sqlalchemy.sql import func
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, field_validator
+from sqlmodel import func, or_, select
+from sqlmodel.sql.expression import col
 
 from ..auth import get_current_user
-from ..database import get_db
+from ..database import SessionDep
 from ..models import DomainList, ListSource, ListType
 
 router = APIRouter(prefix="/api/lists", tags=["lists"])
@@ -17,18 +16,32 @@ router = APIRouter(prefix="/api/lists", tags=["lists"])
 class DomainRequest(BaseModel):
     domain: str
 
+    @field_validator('domain')
+    @classmethod
+    def validate_domain(cls, v):
+        pattern = re.compile(r'^(?=.{1,253}$)(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*\.[A-Za-z]{2,}$')
+        if not pattern.match(v):
+            raise ValueError('Invalid domain name')
+        return v
+
 
 @router.get("/{source}/{list_type}/domains")
 def list_domains_in_list(
     source: ListSource,
     list_type: ListType,
-    db: Annotated[Session, Depends(get_db)],
-    user: Annotated[object, Depends(get_current_user)]
-):
-    q = db.query(DomainList).filter_by(source=source.value, list_type=list_type.value)
+    session: SessionDep,
+    current_user: Annotated[object, Depends(get_current_user)],
+    skip: Annotated[int, Query(ge=0, description="Number of records to skip for pagination")] = 0,
+    limit: Annotated[int, Query(ge=1, le=1000, description="Maximum number of records to return")] = 100,
+) -> Sequence[DomainList]:
+    statement = select(DomainList).where(DomainList.source == source,
+                                         DomainList.list_type == list_type)
     if source is ListSource.llm:
-        q = q.filter((DomainList.expires_at == None) | (DomainList.expires_at > func.now()))
-    domains = q.all()
+        statement = statement.where(or_(col(DomainList.expires_at) is None,
+                                        DomainList.expires_at > func.now()))
+    domains = session.exec(
+        statement.offset(skip).limit(limit)
+    ).all()
     return domains
 
 
@@ -42,18 +55,20 @@ def list_domains_in_list(
 )
 def add_domain_to_manual_list(
     list_type: ListType,
-    req: DomainRequest,
-    db: Annotated[Session, Depends(get_db)],
-    user: Annotated[object, Depends(get_current_user)]
+    domain_request: DomainRequest,
+    session: SessionDep,
+    current_user: Annotated[object, Depends(get_current_user)]
 ):
-    exists = db.query(DomainList).filter_by(domain=req.domain).first()
-    if exists:
+    existing_domain = session.exec(select(DomainList)
+                                   .where(DomainList.domain == domain_request.domain)).first()
+    if existing_domain:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT,
-                            detail=f"Domain {req.domain} already exists in {list_type.value} list with source {exists.source.value}")
+                            detail=f"Domain {domain_request.domain} already exists in {list_type.value} list with source {existing_domain.source.value}")
 
-    dl = DomainList(domain=req.domain, list_type=list_type.value, source="manual", expires_at=None)
-    db.add(dl)
-    db.commit()
+    domain_list = DomainList(domain=domain_request.domain, list_type=list_type,
+                             source=ListSource.manual, expires_at=None)
+    session.add(domain_list)
+    session.commit()
     return {"status": "created"}
 
 
@@ -68,17 +83,18 @@ def remove_domain_from_list(
     source: ListSource,
     list_type: ListType,
     domain: str,
-    db: Annotated[Session, Depends(get_db)],
-    user: Annotated[object, Depends(get_current_user)],
+    session: SessionDep,
+    current_user: Annotated[object, Depends(get_current_user)],
 ):
-    q = db.query(DomainList).filter_by(
-        domain=domain, list_type=list_type.value, source=source.value)
+    statement = select(DomainList).where(DomainList.domain == domain,
+                                         DomainList.list_type == list_type, DomainList.source == source)
     if source is ListSource.llm:
-        q = q.filter((DomainList.expires_at == None) | (DomainList.expires_at > func.now()))
-    dl = q.first()
-    if not dl:
+        statement = statement.where(or_(col(DomainList.expires_at) is None,
+                                        DomainList.expires_at > func.now()))
+    domain_list = session.exec(statement).first()
+    if not domain_list:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail="Domain not found in list")
-    db.delete(dl)
-    db.commit()
+    session.delete(domain_list)
+    session.commit()
     return {"status": "deleted"}
