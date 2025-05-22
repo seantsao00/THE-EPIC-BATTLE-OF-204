@@ -21,18 +21,15 @@ class FilteringResolver(BaseResolver):
         self.llm_thread.start()
 
     async def _process_queue(self):
-        pending = set()
         loop = asyncio.get_event_loop()
         while True:
             domain = await loop.run_in_executor(None, self.domain_llm_queue.get)
             if domain is None:
                 break
-            task = loop.create_task(is_domain_safe(domain))
-            pending.add(task)
-            done, pending = await asyncio.wait(pending, timeout=0, return_when=asyncio.ALL_COMPLETED)
-            self.domain_llm_queue.task_done()
-        if pending:
-            await asyncio.wait(pending)
+            try:
+                await is_domain_safe(domain)
+            finally:
+                self.domain_llm_queue.task_done()
 
     def resolve(self, request, handler):
         qname = str(request.q.qname)
