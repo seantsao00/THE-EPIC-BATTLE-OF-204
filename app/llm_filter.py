@@ -1,5 +1,6 @@
 from typing import AsyncGenerator
 
+import aiohttp
 import openai
 from crawl4ai import (
     AsyncWebCrawler,
@@ -34,19 +35,33 @@ async def fetch_site_text(domain: str, timeout: int = 5, max_bytes: int = 5000) 
         verbose=False
     )
 
+    # Try crawl4ai first
     for scheme in ["https", "http"]:
         url = f"{scheme}://{domain.strip('.')}/"
-        async with AsyncWebCrawler(config=browser_config) as crawler:
-            try:
+        try:
+            async with AsyncWebCrawler(config=browser_config) as crawler:
                 result = await crawler.arun(url, config=run_config)
 
                 if not isinstance(result, AsyncGenerator):
                     res: CrawlResult = result[0]
                     if res and res.success and res.markdown:
                         return res.markdown[:max_bytes]
-            except Exception as e:
-                print(f"Error fetching {url}: {e}")
-                continue
+        except Exception as e:
+            print(f"Error fetching {url} with crawl4ai: {e}")
+            continue
+
+    # Fallback to aiohttp if crawl4ai fails
+    for scheme in ["https", "http"]:
+        url = f"{scheme}://{domain.strip('.')}/"
+        try:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout)) as session:
+                async with session.get(url) as resp:
+                    if resp.status == 200:
+                        text = await resp.text()
+                        return text[:max_bytes]
+        except Exception as e:
+            print(f"Error fetching {url} with aiohttp: {e}")
+            continue
     return ""
 
 
