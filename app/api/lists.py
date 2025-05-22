@@ -1,7 +1,8 @@
+import re
 from typing import Annotated, Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlmodel import func, or_, select
 from sqlmodel.sql.expression import col
 
@@ -14,6 +15,14 @@ router = APIRouter(prefix="/api/lists", tags=["lists"])
 
 class DomainRequest(BaseModel):
     domain: str
+
+    @field_validator('domain')
+    @classmethod
+    def validate_domain(cls, v):
+        pattern = re.compile(r'^(?=.{1,253}$)(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*\.[A-Za-z]{2,}$')
+        if not pattern.match(v):
+            raise ValueError('Invalid domain name')
+        return v
 
 
 @router.get("/{source}/{list_type}/domains")
