@@ -1,6 +1,6 @@
 from typing import Annotated, Sequence
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlmodel import func, or_, select
 from sqlmodel.sql.expression import col
@@ -21,14 +21,18 @@ def list_domains_in_list(
     source: ListSource,
     list_type: ListType,
     session: SessionDep,
-    current_user: Annotated[object, Depends(get_current_user)]
+    current_user: Annotated[object, Depends(get_current_user)],
+    skip: Annotated[int, Query(ge=0, description="Number of records to skip for pagination")] = 0,
+    limit: Annotated[int, Query(ge=1, le=1000, description="Maximum number of records to return")] = 100,
 ) -> Sequence[DomainList]:
     statement = select(DomainList).where(DomainList.source == source,
                                          DomainList.list_type == list_type)
     if source is ListSource.llm:
         statement = statement.where(or_(col(DomainList.expires_at) is None,
                                         DomainList.expires_at > func.now()))
-    domains = session.exec(statement).all()
+    domains = session.exec(
+        statement.offset(skip).limit(limit)
+    ).all()
     return domains
 
 
