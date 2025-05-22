@@ -39,7 +39,7 @@ def list_domains_in_list(
     current_user: UserDep,
     offset: Annotated[int, Query(ge=0, description="Number of records to skip for pagination")] = 0,
     limit: Annotated[int, Query(ge=1, le=1000, description="Maximum number of records to return")] = 100,
-) -> dict:
+) :
     statement = select(DomainList).where(DomainList.source == source,
                                          DomainList.list_type == list_type)
     total = session.exec(
@@ -121,3 +121,34 @@ def remove_domain_from_list(
     session.delete(domain_list)
     session.commit()
     return {"status": "deleted"}
+
+
+class ListStatsResponse(BaseModel):
+    total_domains: int
+    whitelist_count: int
+    blacklist_count: int
+    manual_count: int
+    llm_count: int
+
+@router.get("/stats")
+def get_list_stats(session: SessionDep, current_user: UserDep) -> ListStatsResponse:
+    total_domains = session.exec(select(func.count()).select_from(DomainList)).one()
+    whitelist_count = session.exec(select(func.count())
+                                   .select_from(DomainList)
+                                   .where(DomainList.list_type == ListType.whitelist)).one()
+    blacklist_count = session.exec(select(func.count())
+                                   .select_from(DomainList)
+                                   .where(DomainList.list_type == ListType.blacklist)).one()
+    manual_count = session.exec(select(func.count())
+                                .select_from(DomainList)
+                                .where(DomainList.source == ListSource.manual)).one()
+    llm_count = session.exec(select(func.count())
+                             .select_from(DomainList)
+                             .where(DomainList.source == ListSource.llm)).one()
+    return ListStatsResponse(
+        total_domains=total_domains,
+        whitelist_count=whitelist_count,
+        blacklist_count=blacklist_count,
+        manual_count=manual_count,
+        llm_count=llm_count
+    )
