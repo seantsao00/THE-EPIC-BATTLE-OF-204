@@ -1,4 +1,3 @@
-import os
 from typing import AsyncGenerator
 
 import openai
@@ -8,6 +7,7 @@ from sqlmodel import Session, select
 
 from .database import engine
 from .models import DomainList, ListSource, ListType
+from .settings import settings
 
 
 async def fetch_site_text(domain: str, timeout: int = 5, max_bytes: int = 5000) -> str:
@@ -50,7 +50,7 @@ async def moderate_text(text: str) -> dict:
     if not text:
         return {"flagged": False, "categories": {}}
     try:
-        response = await openai.AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"]).moderations.create(
+        response = await openai.AsyncOpenAI(api_key=settings.openai_api_key).moderations.create(
             model="omni-moderation-latest",
             input=text,
         )

@@ -1,4 +1,3 @@
-import os
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
@@ -10,8 +9,9 @@ from sqlmodel import Session, select
 
 from .database import SessionDep
 from .models import User
+from .settings import settings
 
-SECRET_KEY = os.environ.get("SECRET_KEY", "placeholder_secret_key")
+SECRET_KEY = settings.secret_key
 
 ALGORITHM = "HS256"
 
