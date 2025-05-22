@@ -9,7 +9,7 @@ from crawl4ai import (
     CacheMode,
     CrawlerRunConfig,
     CrawlResult,
-    DefaultMarkdownGenerator,
+    DefaultMarkdownGenerator
 )
 from sqlmodel import Session, select
 
@@ -23,6 +23,7 @@ async def fetch_site_text(domain: str, timeout: int = 5, max_bytes: int = 5000) 
     browser_config = BrowserConfig(
         browser_type="chromium",
         headless=True,
+        headers={"Accept-Language": "en-US,en;q=0.9"},
         verbose=False
     )
     fit_md_generator = DefaultMarkdownGenerator(
@@ -31,9 +32,9 @@ async def fetch_site_text(domain: str, timeout: int = 5, max_bytes: int = 5000) 
     )
     run_config = CrawlerRunConfig(
         deep_crawl_strategy=BestFirstCrawlingStrategy(  # can be DFSDeepCrawlStrategy or BFSDeepCrawlStrategy
-            max_depth=3,
-            max_pages=3,
-            include_external=False
+            max_depth=5,
+            max_pages=7,
+            include_external=True,
         ),
         page_timeout=timeout * 1000,  # ms
         cache_mode=CacheMode.BYPASS,  # can be ENABLED, BYPASS, READ_ONLY, WRITE_ONLY
