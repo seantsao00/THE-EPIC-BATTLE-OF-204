@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from typing import AsyncGenerator
 
 import aiohttp
@@ -9,7 +10,7 @@ from crawl4ai import (
     CacheMode,
     CrawlerRunConfig,
     CrawlResult,
-    DefaultMarkdownGenerator
+    DefaultMarkdownGenerator,
 )
 from sqlmodel import Session, select
 
@@ -111,14 +112,18 @@ async def is_domain_safe(domain: str) -> bool:
                 DomainList.domain == domain,
                 DomainList.list_type == ListType.whitelist)).first():
             return True
+
         content = await fetch_site_text(domain)
         harmful = await moderate_text(content)
 
         print(f"Moderation result for {domain}: {harmful}")
 
-        if harmful:
-            session.add(DomainList(domain=domain, list_type=ListType.blacklist, source=ListSource.llm))
-        else:
-            session.add(DomainList(domain=domain, list_type=ListType.whitelist, source=ListSource.llm))
+        list_type = ListType.blacklist if harmful else ListType.whitelist
+        session.add(DomainList(
+            domain=domain,
+            list_type=list_type,
+            source=ListSource.llm,
+            expires_at=datetime.now(timezone.utc) + timedelta(days=1)
+        ))
         session.commit()
         return not harmful

@@ -3,6 +3,7 @@ from typing import Annotated, Sequence
 
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, field_validator
+from rapidfuzz import fuzz, process
 from sqlmodel import func, or_, select
 from sqlmodel.sql.expression import col
 
@@ -24,21 +25,36 @@ def list_domains_in_list(
     list_type: ListType,
     session: SessionDep,
     current_user: UserDep,
+    keyword: Annotated[str | None, Query(description="Fuzzy filter domains by keyword")] = None,
     offset: Annotated[int, Query(ge=0, description="Number of records to skip for pagination")] = 0,
-    limit: Annotated[int, Query(ge=1, le=1000, description="Maximum number of records to return")] = 100,
+    limit: Annotated[int, Query(ge=1, le=1000, description="Maximum number of records to return")] = 10,
 ) -> DomainListResponse:
     statement = select(DomainList).where(DomainList.source == source,
                                          DomainList.list_type == list_type)
-    total = session.exec(
-        select(func.count())
-        .select_from(DomainList)
-        .where(DomainList.source == source, DomainList.list_type == list_type)).one()
     if source is ListSource.llm:
         statement = statement.where(or_(col(DomainList.expires_at) is None,
                                         DomainList.expires_at > func.now()))
-    domains = session.exec(
-        statement.offset(offset).limit(limit)
-    ).all()
+    if keyword:
+        all_domains = session.exec(statement).all()
+        matches = process.extract(
+            keyword,
+            all_domains,
+            processor=lambda d: getattr(d, 'domain', None) or str(d),
+            scorer=fuzz.token_set_ratio,
+            limit=offset + limit
+        )
+        sorted_domains = [match[0] for match in matches][offset:offset + limit]
+        total = len(matches)
+        domains = sorted_domains
+    else:
+        total = session.exec(select(func.count()).select_from(DomainList).where(
+            DomainList.source == source,
+            DomainList.list_type == list_type)
+            .where(or_(col(DomainList.expires_at) is None,
+                       DomainList.expires_at > func.now()))).one()
+        domains = session.exec(
+            statement.offset(offset).limit(limit)
+        ).all()
     return DomainListResponse(
         domains=domains,
         meta=MetaResponse(

@@ -2,6 +2,7 @@ import asyncio
 import queue
 import socket
 import threading
+from datetime import datetime, timezone
 
 from dnslib import QTYPE, RR, A
 from dnslib.server import BaseResolver, DNSLogger, DNSRecord, DNSServer
@@ -36,18 +37,21 @@ class FilteringResolver(BaseResolver):
         qname = str(request.q.qname)
         with Session(engine) as session:
             print(f"Resolving {qname}")
-            if session.exec(
-                select(DomainList).where(
-                    DomainList.domain == qname,
-                    DomainList.list_type == ListType.whitelist)).first():
-                status = DomainStatus.allowed
-                print(f"Domain {qname} is whitelisted")
-            elif session.exec(select(DomainList).where(DomainList.domain == qname, DomainList.list_type == ListType.blacklist)).first():
-                status = DomainStatus.blocked
-                print(f"Domain {qname} is blacklisted")
-            else:
-                print(f"Domain {qname} not in DB, enqueueing for LLM check...")
-                status = DomainStatus.reviewed
+
+            entries = session.exec(select(DomainList).where(DomainList.domain == qname)).all()
+
+            status = DomainStatus.reviewed
+            for entry in entries:
+                if entry.expires_at is None or entry.expires_at > datetime.now(timezone.utc).replace(tzinfo=None):
+                    if entry.list_type == ListType.blacklist:
+                        print(f"Domain {qname} is expired and blacklisted")
+                        status = DomainStatus.blocked
+                    elif entry.list_type == ListType.whitelist:
+                        print(f"Domain {qname} is expired and whitelisted")
+                        status = DomainStatus.allowed
+
+            if status == DomainStatus.reviewed:
+                print(f"Domain {qname} not found in DB, checking lists...")
                 self.domain_llm_queue.put(qname)
 
             log = DomainLog(domain=qname, status=status)

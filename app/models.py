@@ -1,5 +1,5 @@
 import enum
-from datetime import datetime
+from datetime import datetime, timezone
 
 from pydantic import BaseModel
 from sqlmodel import Field, SQLModel
@@ -39,7 +39,7 @@ class DomainList(SQLModel, table=True):
     domain: str = Field(index=True, unique=True, max_length=255)
     list_type: ListType = Field(index=True)
     source: ListSource
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     expires_at: datetime | None = None
 
 
