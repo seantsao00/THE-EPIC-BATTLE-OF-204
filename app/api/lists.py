@@ -36,6 +36,17 @@ def list_domains_in_list(
                                         DomainList.expires_at > func.now()))
     if keyword:
         all_domains = session.exec(statement).all()
+        
+        # Get all matches without limiting to calculate the true total
+        all_matches = process.extract(
+            keyword,
+            all_domains,
+            processor=lambda d: getattr(d, 'domain', None) or str(d),
+            scorer=fuzz.token_set_ratio,
+            limit=None  # No limit to get the full count
+        )
+        
+        # Get the matches needed for pagination
         matches = process.extract(
             keyword,
             all_domains,
@@ -43,15 +54,22 @@ def list_domains_in_list(
             scorer=fuzz.token_set_ratio,
             limit=offset + limit
         )
+        
         sorted_domains = [match[0] for match in matches][offset:offset + limit]
-        total = len(matches)
+        total = len(all_matches)  # Use all_matches for accurate total
         domains = sorted_domains
     else:
-        total = session.exec(select(func.count()).select_from(DomainList).where(
+        # Use a count statement that matches our main query filters
+        count_stmt = select(func.count()).select_from(DomainList).where(
             DomainList.source == source,
             DomainList.list_type == list_type)
-            .where(or_(col(DomainList.expires_at) is None,
-                       DomainList.expires_at > func.now()))).one()
+        
+        # Apply the same expiration filter only for llm source
+        if source is ListSource.llm:
+            count_stmt = count_stmt.where(or_(col(DomainList.expires_at) is None,
+                                             DomainList.expires_at > func.now()))
+        
+        total = session.exec(count_stmt).one()
         domains = session.exec(
             statement.offset(offset).limit(limit)
         ).all()

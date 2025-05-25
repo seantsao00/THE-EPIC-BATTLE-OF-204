@@ -28,6 +28,16 @@ def list_domain_logs(
     if keyword:
         all_logs = session.exec(select(DomainLog)).all()
 
+        # Get all matches without limiting to calculate the true total
+        all_matches = process.extract(
+            keyword,
+            all_logs,
+            processor=lambda log: getattr(log, 'domain', None) or str(log),
+            scorer=fuzz.token_set_ratio,
+            limit=None  # No limit to get the full count
+        )
+        
+        # Get the matches needed for pagination
         matches = process.extract(
             keyword,
             all_logs,
@@ -37,7 +47,7 @@ def list_domain_logs(
         )
 
         sorted_logs = [match[0] for match in matches][offset:offset + limit]
-        total = len(matches)
+        total = len(all_matches)  # Use all_matches for accurate total
         logs = sorted_logs
     else:
         total = session.exec(select(func.count()).select_from(DomainLog)).one()
