@@ -21,6 +21,7 @@ A LLM-driven DNS firewall and moderation API for college final project use.
     API_PORT=8000
     SECRET_KEY=your_secret_key
     SQLALCHEMY_DATABASE_URL=sqlite:///./db.sqlite3
+    CLAM_URL=cool.ntu.edu.tw
     ```
 
 1. **Initialize admin user**

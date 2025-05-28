@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     api_port: int = 8000
     secret_key: str = "placeholder_secret_key"
     sqlalchemy_database_url: str = "sqlite:///./firewall.db"
+    clam_url: str = "cool.ntu.edu.tw"
 
     model_config = SettingsConfigDict(env_file=".env")
 

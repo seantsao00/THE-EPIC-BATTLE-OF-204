@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from dnslib import QTYPE, RR, A
 from dnslib.server import BaseResolver, DNSLogger, DNSRecord, DNSServer
 from sqlmodel import Session, select
+from .settings import settings
 
 from .database import engine
 from .llm_filter import is_domain_safe
@@ -59,8 +60,11 @@ class FilteringResolver(BaseResolver):
             session.commit()
 
         if status == DomainStatus.blocked.value:
+            name = str(settings.clam_url).rstrip('.')
+            print(f"Blocking domain {qname}")
+            print(f"Return web {name} : {socket.gethostbyname(name)}")
             reply = request.reply()
-            reply.add_answer(RR(qname, QTYPE.A, rdata=A("0.0.0.0"), ttl=60))
+            reply.add_answer(RR(qname, QTYPE.A, rdata=A(socket.gethostbyname(name)), ttl=60))
             return reply
 
         upstream_ip = "8.8.8.8"
