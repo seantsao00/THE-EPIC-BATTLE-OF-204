@@ -31,8 +31,8 @@ def list_domains_in_list(
 ) -> DomainListResponse:
     statement = select(DomainList).where(DomainList.source == source,
                                          DomainList.list_type == list_type)
-    if source is ListSource.llm:
-        statement = statement.where(or_(col(DomainList.expires_at) is None,
+    if source == ListSource.llm:
+        statement = statement.where(or_(DomainList.expires_at == None,
                                         DomainList.expires_at > func.now()))
     if keyword:
         all_domains = session.exec(statement).all()
@@ -65,8 +65,8 @@ def list_domains_in_list(
             DomainList.list_type == list_type)
         
         # Apply the same expiration filter only for llm source
-        if source is ListSource.llm:
-            count_stmt = count_stmt.where(or_(col(DomainList.expires_at) is None,
+        if source == ListSource.llm:
+            count_stmt = count_stmt.where(or_(DomainList.expires_at == None,
                                              DomainList.expires_at > func.now()))
         
         total = session.exec(count_stmt).one()
@@ -144,8 +144,8 @@ def remove_domain_from_list(
         DomainList.domain == domain,
         DomainList.list_type == list_type,
         DomainList.source == source)
-    if source is ListSource.llm:
-        statement = statement.where(or_(col(DomainList.expires_at) is None,
+    if source == ListSource.llm:
+        statement = statement.where(or_(DomainList.expires_at == None,
                                         DomainList.expires_at > func.now()))
     domain_list = session.exec(statement).first()
     if not domain_list:
