@@ -119,7 +119,7 @@ def add_domain_to_manual_list(
             f"in {existing_domain.list_type.value} list "
             f"with source {existing_domain.source.value}")
 
-    domain_list = DomainList(domain=domain_request.domain, list_type=list_type,
+    domain_list = DomainList(domain=domain_request.domain + ".", list_type=list_type,
                              source=ListSource.manual, expires_at=None)
     session.add(domain_list)
     session.commit()
